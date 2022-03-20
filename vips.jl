@@ -61,6 +61,25 @@ module Vips
                 Ref(gvalue), type)
         end
 
+        macro define_set(fun, typ, ctyp)
+            quote
+                function $(esc(:set))($(esc(:gvalue)), $(esc(:a))::$(esc(typ)))
+                    ccall(
+                        ($(fun), :libvips), 
+                        Cvoid, 
+                        (Ptr{GValue}, $ctyp), 
+                        Ref(gvalue), 
+                        a)
+                end
+            end
+        end
+
+        println(@macroexpand @define_set(:g_value_set_boolean, Bool, Cint))
+
+        @define_set(:g_value_set_boolean, Bool, Cint)
+
+        #=
+        #
         for (fun, typ, ctyp) in (
             (:g_value_set_boolean,       Bool,    Cint),
             (:g_value_set_int64,         Int64,   Clonglong),
@@ -68,15 +87,9 @@ module Vips
             (:g_value_set_double,        Float64, Cdouble),
             (:g_value_set_float,         Float32, Cfloat),
             (:vips_value_set_ref_string, String,  Cstring))
-
-            @eval set(gvalue, a::$typ) = ccall(
-                # ($fun, _LIB_FP), 
-                (:g_value_set_boolean, _LIB_FP), 
-                Cvoid, 
-                (Ptr{GValue}, $ctyp), 
-                Ref(gvalue), 
-                a)
+            @define_set(fun, typ, ctyp)
         end
+        =#
 
         function gtype(name)
             ccall((:g_type_from_name, _LIB_FP), Int64, (Cstring,), name)
