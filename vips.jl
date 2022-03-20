@@ -40,7 +40,7 @@ module Vips
         import ..Vips: _LIB_FP
 
         mutable struct GValue
-            g_type::Int64
+            gtype::Int64
             data1::Int64
             data2::Int64
 
@@ -70,7 +70,8 @@ module Vips
             (:vips_value_set_ref_string, String,  Cstring))
 
             @eval set(gvalue, a::$typ) = ccall(
-                ($fun, _LIB_FP), 
+                # ($fun, _LIB_FP), 
+                (:g_value_set_boolean, _LIB_FP), 
                 Cvoid, 
                 (Ptr{GValue}, $ctyp), 
                 Ref(gvalue), 
@@ -113,14 +114,17 @@ module Vips
             (:g_value_get_string,  :GSTR,     Cstring))
 
             @eval get_type(gvalue, ::Val{$gtyp}) = ccall(
-                ($fun, _LIB_FP), 
+                # ($fun, _LIB_FP), 
+                (:g_value_get_boolean, _LIB_FP), 
                 $ctyp, 
                 (Ptr{GValue},), 
                 Ref(gvalue))
         end
 
         function get(gvalue)
-            get_type(gvalue, gvalue.gtype)
+            println("gvalue.gtype = ", gvalue.gtype)
+            println("GBOOLEAN = ", GBOOLEAN)
+            get_type(gvalue, Val(gvalue.gtype))
         end
 
     end
@@ -172,8 +176,12 @@ image = nothing
 gvalue = Vips.GValues.GValue()
 println("built object ", gvalue)
 
+Vips.GValues.init(gvalue, Vips.GValues.GBOOLEAN)
 Vips.GValues.set(gvalue, true)
 println("assigned true ", gvalue)
+
+b = Vips.GValues.get(gvalue)
+println("read value ", b)
 
 gvalue = nothing
 
