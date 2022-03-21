@@ -73,21 +73,32 @@ macro define_set(fun, typ, ctyp)
     quote
         function $(esc(:set))($(esc(:gvalue)), $(esc(:a))::$(esc(typ)))
             ccall(
-                ($(fun), :libvips), 
+                ($fun, _LIBNAME), 
                 Cvoid, 
                 (Ptr{GValue}, $ctyp), 
-                Ref(gvalue), 
+                Ref($(esc(:gvalue))), 
                 a)
         end
     end
 end
 
-println(@macroexpand @define_set(:g_value_set_boolean, Bool, Cint))
+# println(@macroexpand @define_set(:g_value_set_boolean, Bool, Cint))
 
-@define_set(:g_value_set_boolean, Bool, Cint)
+@define_set(:g_value_set_boolean,       Bool,    Cint)
+@define_set(:g_value_set_int64,         Int64,   Clonglong)
+@define_set(:g_value_set_uint64,        UInt64,  Culonglong)
+@define_set(:g_value_set_double,        Float64, Cdouble)
+@define_set(:g_value_set_float,         Float32, Cfloat)
+@define_set(:vips_value_set_ref_string, String,  Cstring)
 
 #=
-#
+
+    fails with:
+
+        UndefVarError: g_value_set_boolean not defined
+
+    ie. the symbol is being misinteropreted as an identifier
+
 for (fun, typ, ctyp) in (
     (:g_value_set_boolean,       Bool,    Cint),
     (:g_value_set_int64,         Int64,   Clonglong),
@@ -95,8 +106,11 @@ for (fun, typ, ctyp) in (
     (:g_value_set_double,        Float64, Cdouble),
     (:g_value_set_float,         Float32, Cfloat),
     (:vips_value_set_ref_string, String,  Cstring))
-    @define_set(fun, typ, ctyp)
+
+    @eval set(gvalue, a::$typ) = 
+        ccall(($fun, _LIBNAME), Cvoid, (Ptr{GValue}, $ctyp), Ref(gvalue), a)
 end
+
 =#
 
 function gtype(name)
@@ -185,7 +199,6 @@ end
 
 end # of Vips module
 
-# image = Vips.new_from_file("/home/john/pics/xxxx")
 image = Vips.new_from_file("/home/john/pics/k2.jpg")
 println("built object ", image)
 println("width = ", Vips.width(image))
