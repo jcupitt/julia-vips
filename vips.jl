@@ -69,49 +69,21 @@ function init(gvalue, type)
         Ref(gvalue), type)
 end
 
-macro define_set(fun, typ, ctyp)
-    quote
-        function $(esc(:set))($(esc(:gvalue)), $(esc(:a))::$(esc(typ)))
-            ccall(
-                ($fun, _LIBNAME), 
-                Cvoid, 
-                (Ptr{GValue}, $ctyp), 
-                Ref($(esc(:gvalue))), 
-                a)
+for (fun, typ, ctyp) in (
+    ("g_value_set_boolean",       Bool,    Cint),
+    ("g_value_set_int64",         Int64,   Clonglong),
+    ("g_value_set_uint64",        UInt64,  Culonglong),
+    ("g_value_set_double",        Float64, Cdouble),
+    ("g_value_set_float",         Float32, Cfloat),
+    ("vips_value_set_ref_string", String,  Cstring))
+
+    @eval begin
+        function set(gvalue, a::$typ)
+            ccall(($fun, _LIBNAME), Cvoid, (Ptr{GValue}, $ctyp), Ref(gvalue), a)
         end
     end
+
 end
-
-# println(@macroexpand @define_set(:g_value_set_boolean, Bool, Cint))
-
-@define_set(:g_value_set_boolean,       Bool,    Cint)
-@define_set(:g_value_set_int64,         Int64,   Clonglong)
-@define_set(:g_value_set_uint64,        UInt64,  Culonglong)
-@define_set(:g_value_set_double,        Float64, Cdouble)
-@define_set(:g_value_set_float,         Float32, Cfloat)
-@define_set(:vips_value_set_ref_string, String,  Cstring)
-
-#=
-
-    fails with:
-
-        UndefVarError: g_value_set_boolean not defined
-
-    ie. the symbol is being misinteropreted as an identifier
-
-for (fun, typ, ctyp) in (
-    (:g_value_set_boolean,       Bool,    Cint),
-    (:g_value_set_int64,         Int64,   Clonglong),
-    (:g_value_set_uint64,        UInt64,  Culonglong),
-    (:g_value_set_double,        Float64, Cdouble),
-    (:g_value_set_float,         Float32, Cfloat),
-    (:vips_value_set_ref_string, String,  Cstring))
-
-    @eval set(gvalue, a::$typ) = 
-        ccall(($fun, _LIBNAME), Cvoid, (Ptr{GValue}, $ctyp), Ref(gvalue), a)
-end
-
-=#
 
 function gtype(name)
     ccall((:g_type_from_name, _LIBNAME), Int64, (Cstring,), name)
@@ -141,24 +113,22 @@ for (nm, typ) in (
 end
 
 for (fun, gtyp, ctyp) in (
-    (:g_value_get_boolean, :GBOOLEAN, Cint),
-    (:g_value_get_int64,   :GINT64,   Clonglong),
-    (:g_value_get_uint64,  :GUINT64,  Culonglong),
-    (:g_value_get_double,  :GDOUBLE,  Cdouble),
-    (:g_value_get_float,   :GFLOAT,   Cfloat),
-    (:g_value_get_string,  :GSTR,     Cstring))
+    ("g_value_get_boolean", :GBOOLEAN, Cint),
+    ("g_value_get_int64",   :GINT64,   Clonglong),
+    ("g_value_get_uint64",  :GUINT64,  Culonglong),
+    ("g_value_get_double",  :GDOUBLE,  Cdouble),
+    ("g_value_get_float",   :GFLOAT,   Cfloat),
+    ("vips_value_get_ref_string",  :REFSTR,   Cstring),
+    ("g_value_get_string",  :GSTR,     Cstring))
 
     @eval get_type(gvalue, ::Val{$gtyp}) = ccall(
-        # ($fun, _LIBNAME), 
-        (:g_value_get_boolean, _LIBNAME), 
+        ($fun, _LIBNAME), 
         $ctyp, 
         (Ptr{GValue},), 
         Ref(gvalue))
 end
 
 function get(gvalue)
-    println("gvalue.gtype = ", gvalue.gtype)
-    println("GBOOLEAN = ", GBOOLEAN)
     get_type(gvalue, Val(gvalue.gtype))
 end
 
@@ -204,15 +174,25 @@ println("built object ", image)
 println("width = ", Vips.width(image))
 image = nothing
 
+println()
+println("GValue tests:")
 gvalue = Vips.GValue()
-println("built object ", gvalue)
 
+println("assigning bool:")
+gvalue = Vips.GValue()
 Vips.init(gvalue, Vips.GBOOLEAN)
 Vips.set(gvalue, true)
-println("assigned true ", gvalue)
-
 b = Vips.get(gvalue)
-println("read value ", b)
+println("gvalue = ", gvalue)
+println("get value = ", b)
+
+println("assigning refstr:")
+gvalue = Vips.GValue()
+Vips.init(gvalue, Vips.REFSTR)
+Vips.set(gvalue, "hello!")
+s = Vips.get(gvalue)
+println("gvalue = ", gvalue)
+println("get value = ", unsafe_string(s))
 
 gvalue = nothing
 
