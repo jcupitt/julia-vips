@@ -117,15 +117,32 @@ for (fun, gtyp, ctyp) in (
     ("g_value_get_int64",   :GINT64,   Clonglong),
     ("g_value_get_uint64",  :GUINT64,  Culonglong),
     ("g_value_get_double",  :GDOUBLE,  Cdouble),
-    ("g_value_get_float",   :GFLOAT,   Cfloat),
-    ("vips_value_get_ref_string",  :REFSTR,   Cstring),
-    ("g_value_get_string",  :GSTR,     Cstring))
+    ("g_value_get_float",   :GFLOAT,   Cfloat))
 
     @eval get_type(gvalue, ::Val{$gtyp}) = ccall(
         ($fun, _LIBNAME), 
         $ctyp, 
         (Ptr{GValue},), 
         Ref(gvalue))
+end
+
+# string gets needs an extra unsafe_string() on the output to get a julia
+# string back
+for (fun, gtyp) in (
+    ("vips_value_get_ref_string",  :REFSTR),
+    ("g_value_get_string",  :GSTR))
+
+    @eval begin
+        function get_type(gvalue, ::Val{$gtyp}) 
+            str = ccall(
+                ($fun, _LIBNAME), 
+                Cstring, 
+                (Ptr{GValue},), 
+                Ref(gvalue))
+
+            unsafe_string(str)
+        end
+    end
 end
 
 function get(gvalue)
@@ -192,7 +209,7 @@ Vips.init(gvalue, Vips.REFSTR)
 Vips.set(gvalue, "hello!")
 s = Vips.get(gvalue)
 println("gvalue = ", gvalue)
-println("get value = ", unsafe_string(s))
+println("get value = ", s)
 
 gvalue = nothing
 
