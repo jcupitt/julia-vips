@@ -10,16 +10,22 @@ module Vips
 
 const _LIBNAME = :libvips
 
-init_return = ccall((:vips_init, _LIBNAME), Int32, (String,), "")
+init_return = ccall((:vips_init, _LIBNAME), 
+    Int32, (String,), 
+    "")
 if init_return != 0
     error("unable to start libvips")
 end
 println("started libvips successfully!")
 
-version(flag) = ccall((:vips_version, _LIBNAME), Int32, (Int32,), flag)
-shutdown() = ccall((:vips_shutdown, _LIBNAME), Cvoid, ())
+version(flag) = ccall((:vips_version, _LIBNAME), 
+    Int32, (Int32,), 
+    flag)
+shutdown() = ccall((:vips_shutdown, _LIBNAME), 
+    Cvoid, ())
 error_exit(msg::String = "") = ccall((:vips_error_exit, _LIBNAME), 
-    Cvoid, (String,), msg)
+    Cvoid, (String,), 
+    msg)
 
 const VIPS_VERSION = VersionNumber([version(i) for i=0:2]...)
 println("libvips version = $(VIPS_VERSION)")
@@ -65,11 +71,15 @@ end
 =#
 
 function ref(x::Ptr{GObject})
-    ccall((:g_object_ref, _LIBNAME), Cvoid, (Ptr{GObject},), x)
+    ccall((:g_object_ref, _LIBNAME), 
+        Cvoid, (Ptr{GObject},), 
+        x)
 end
 
 function unref(x::Ptr{GObject})
-    ccall((:g_object_unref, _LIBNAME), Cvoid, (Ptr{GObject},), x)
+    ccall((:g_object_unref, _LIBNAME), 
+        Cvoid, (Ptr{GObject},), 
+        x)
 end
 
 #=
@@ -79,7 +89,9 @@ end
 =#
 
 function gtype(name)
-    ccall((:g_type_from_name, _LIBNAME), Int64, (Cstring,), name)
+    ccall((:g_type_from_name, _LIBNAME), 
+        Int64, (Cstring,), 
+        name)
 end
 
 for (nm, typ) in (
@@ -106,12 +118,14 @@ for (nm, typ) in (
 end
 
 function unset(gvalue::GValue)
-    ccall((:g_value_unset, _LIBNAME), Cvoid, (Ptr{GValue},), 
+    ccall((:g_value_unset, _LIBNAME), 
+        Cvoid, (Ptr{GValue},), 
         Ref(gvalue))
 end
 
 function init(gvalue, type)
-    ccall((:g_value_init, _LIBNAME), Cvoid, (Ptr{GValue}, Int64), 
+    ccall((:g_value_init, _LIBNAME), 
+        Cvoid, (Ptr{GValue}, Int64), 
         Ref(gvalue), type)
 end
 
@@ -121,31 +135,80 @@ for (fun, gtyp, ctyp) in (
     ("g_value_set_uint64",        :GUINT64,  Culonglong),
     ("g_value_set_double",        :GDOUBLE,  Cdouble),
     ("g_value_set_float",         :GFLOAT,   Cfloat),
+    ("g_value_set_enum",          :GENUM,    Cint),
+    ("g_value_set_flags",         :GFLAGS,   Cint),
+    ("g_value_set_string",        :GSTR,     Cstring),
     ("vips_value_set_ref_string", :REFSTR,   Cstring))
 
-    @eval set_type(gvalue, ::Val{$gtyp}, value) = ccall(
-        ($fun, _LIBNAME), 
-        Cvoid,
-        (Ptr{GValue}, $ctyp), 
+    @eval set_type(gvalue, ::Val{$gtyp}, value) = ccall(($fun, _LIBNAME), 
+        Cvoid, (Ptr{GValue}, $ctyp), 
         Ref(gvalue), value)
 
 end
 
+function set_type(gvalue, ::Val{ARRAY_INT}, value)
+    # TODO
+end
+
+function set_type(gvalue, ::Val{ARRAY_DOUBLE}, value)
+    # TODO
+end
+
+function set_type(gvalue, ::Val{ARRAY_IMAGE}, value)
+    # TODO
+end
+
+function set_type(gvalue, ::Val{BLOB}, value)
+    # TODO
+end
+
+function type_fundamental(gtype)
+    ccall((:g_type_fundamental, _LIBNAME), 
+        Clonglong, (Clonglong,), 
+        gtype)
+end
+
+function enum_from_nick(gtype, name)
+    ccall((:vips_enum_from_nick, _LIBNAME), 
+        Clonglong, (Clonglong, Cstring), 
+        gtype, name)
+end
+
+# turn a string into a gtype, ready to be passed into libvips
+function to_enum(gtype, value)
+    if value <: String
+        value = enum_from_nick(gtype, value)
+    end
+
+    value
+end
+
 function set(gvalue, value)
-    set_type(gvalue, Val(gvalue.gtype), value)
+    gtype = gvalue.gtype
+    fundamental = type_fundamental(gtype)
+
+    if fundamental == GENUM
+        value = to_enum(gtype, value)
+        set_type(gvalue, Val(gtype), value)
+    elseif fundamental == GOBJECT
+        set_type(gvalue, Val(GOBJECT), value.pointer)
+    else
+        set_type(gvalue, Val(gtype), value)
+    end
+
 end
 
 for (fun, gtyp, ctyp) in (
     ("g_value_get_boolean", :GBOOLEAN, Cint),
+    ("g_value_get_int",     :GINT,     Cint),
     ("g_value_get_int64",   :GINT64,   Clonglong),
     ("g_value_get_uint64",  :GUINT64,  Culonglong),
     ("g_value_get_double",  :GDOUBLE,  Cdouble),
+    ("g_value_get_object",  :GOBJECT,  Ptr{GObject}),
     ("g_value_get_float",   :GFLOAT,   Cfloat))
 
-    @eval get_type(gvalue, ::Val{$gtyp}) = ccall(
-        ($fun, _LIBNAME), 
-        $ctyp, 
-        (Ptr{GValue},), 
+    @eval get_type(gvalue, ::Val{$gtyp}) = ccall(($fun, _LIBNAME), 
+        $ctyp, (Ptr{GValue},), 
         Ref(gvalue))
 end
 
@@ -157,10 +220,8 @@ for (fun, gtyp) in (
 
     @eval begin
         function get_type(gvalue, ::Val{$gtyp}) 
-            str = ccall(
-                ($fun, _LIBNAME), 
-                Cstring, 
-                (Ptr{GValue},), 
+            str = ccall(($fun, _LIBNAME), 
+                Cstring, (Ptr{GValue},), 
                 Ref(gvalue))
 
             unsafe_string(str)
@@ -168,8 +229,55 @@ for (fun, gtyp) in (
     end
 end
 
+function get_type(gvalue, ::Val{ARRAY_INT})
+    # TODO
+end
+
+function get_type(gvalue, ::Val{ARRAY_DOUBLE})
+    # TODO
+end
+
+function get_type(gvalue, ::Val{ARRAY_IMAGE})
+    # TODO
+end
+
+function get_type(gvalue, ::Val{BLOB})
+    # TODO
+end
+
+function enum_nick(gtype, value)
+    ccall((:vips_enum_nick, _LIBNAME), 
+        Cstring, (Clonglong, Clonglong), 
+        gtype, value)
+end
+
+# turn an enum int back into a string
+function from_enum(gtype, value)
+    pointer = enum_nick(gtype, value)
+    if pointer == C_NULL
+        error("name not in enum")
+    end
+
+    unsafe_string(value)
+end
+
 function get(gvalue)
-    get_type(gvalue, Val(gvalue.gtype))
+    gtype = gvalue.gtype
+    fundamental = type_fundamental(gtype)
+
+    if fundamental == GENUM
+        value = get_type(gvalue, Val(gtype))
+        from_enum(gtype, value)
+    elseif fundamental == GFLAGS
+        get_type(gvalue, Val(fundamental))
+    elseif gtype == IMAGE
+        # g_value_get_object() will not add a ref
+        pointer = get_type(gvalue, Val(GOBJECT))
+        ref(pointer)
+        Image(pointer)
+    else
+        get_type(gvalue, Val(gtype))
+    end
 end
 
 #=
