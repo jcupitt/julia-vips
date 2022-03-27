@@ -26,24 +26,7 @@ println("libvips version = $(VIPS_VERSION)")
 
 #=
 #
-# GObject support
-#
-=#
-
-# the base type for glib ... automatic ref and unref
-abstract type GObject end
-
-function ref(x::Ptr{GObject})
-    ccall((:g_object_ref, _LIBNAME), Cvoid, (Ptr{GObject},), x)
-end
-
-function unref(x::Ptr{GObject})
-    ccall((:g_object_unref, _LIBNAME), Cvoid, (Ptr{GObject},), x)
-end
-
-#=
-#
-# GValue support
+# Types
 #
 =#
 
@@ -59,31 +42,41 @@ mutable struct GValue
 
 end
 
-function unset(gvalue::GValue)
-    ccall((:g_value_unset, _LIBNAME), Cvoid, (Ptr{GValue},), 
-        Ref(gvalue))
-end
+# the base type for glib ... automatic ref and unref
+abstract type GObject end
 
-function init(gvalue, type)
-    ccall((:g_value_init, _LIBNAME), Cvoid, (Ptr{GValue}, Int64), 
-        Ref(gvalue), type)
-end
+# the image type subclasses GObject
+mutable struct Image 
+    pointer::Ptr{GObject}
 
-for (fun, typ, ctyp) in (
-    ("g_value_set_boolean",       Bool,    Cint),
-    ("g_value_set_int64",         Int64,   Clonglong),
-    ("g_value_set_uint64",        UInt64,  Culonglong),
-    ("g_value_set_double",        Float64, Cdouble),
-    ("g_value_set_float",         Float32, Cfloat),
-    ("vips_value_set_ref_string", String,  Cstring))
+    function Image(pointer::Ptr{GObject})
+        ref(pointer)
+        unref(pointer)
 
-    @eval begin
-        function set(gvalue, a::$typ)
-            ccall(($fun, _LIBNAME), Cvoid, (Ptr{GValue}, $ctyp), Ref(gvalue), a)
-        end
+        image = new(pointer)
+        finalizer(image -> unref(image.pointer), image)
     end
-
 end
+
+#=
+#
+# GObject support
+#
+=#
+
+function ref(x::Ptr{GObject})
+    ccall((:g_object_ref, _LIBNAME), Cvoid, (Ptr{GObject},), x)
+end
+
+function unref(x::Ptr{GObject})
+    ccall((:g_object_unref, _LIBNAME), Cvoid, (Ptr{GObject},), x)
+end
+
+#=
+#
+# GValue support
+#
+=#
 
 function gtype(name)
     ccall((:g_type_from_name, _LIBNAME), Int64, (Cstring,), name)
@@ -110,6 +103,36 @@ for (nm, typ) in (
     (:TARGET,       "VipsTarget"))
 
     @eval const $nm = gtype($typ) 
+end
+
+function unset(gvalue::GValue)
+    ccall((:g_value_unset, _LIBNAME), Cvoid, (Ptr{GValue},), 
+        Ref(gvalue))
+end
+
+function init(gvalue, type)
+    ccall((:g_value_init, _LIBNAME), Cvoid, (Ptr{GValue}, Int64), 
+        Ref(gvalue), type)
+end
+
+for (fun, gtyp, ctyp) in (
+    ("g_value_set_boolean",       :GBOOLEAN, Cint),
+    ("g_value_set_int64",         :GINT64,   Clonglong),
+    ("g_value_set_uint64",        :GUINT64,  Culonglong),
+    ("g_value_set_double",        :GDOUBLE,  Cdouble),
+    ("g_value_set_float",         :GFLOAT,   Cfloat),
+    ("vips_value_set_ref_string", :REFSTR,   Cstring))
+
+    @eval set_type(gvalue, ::Val{$gtyp}, value) = ccall(
+        ($fun, _LIBNAME), 
+        Cvoid,
+        (Ptr{GValue}, $ctyp), 
+        Ref(gvalue), value)
+
+end
+
+function set(gvalue, value)
+    set_type(gvalue, Val(gvalue.gtype), value)
 end
 
 for (fun, gtyp, ctyp) in (
@@ -154,19 +177,6 @@ end
 # libvips image support
 #
 =#
-
-# the image type subclasses GObject
-mutable struct Image 
-    pointer::Ptr{GObject}
-
-    function Image(pointer::Ptr{GObject})
-        ref(pointer)
-        unref(pointer)
-
-        image = new(pointer)
-        finalizer(image -> unref(image.pointer), image)
-    end
-end
 
 function new_from_file(filename::String)::Image
     pointer = ccall((:vips_image_new_from_file, "libvips"), 
