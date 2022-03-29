@@ -129,45 +129,6 @@ function init(gvalue, type)
         Ref(gvalue), type)
 end
 
-for (fun, gtyp, ctyp) in (
-    ("g_value_set_boolean",       :GBOOLEAN, Cint),
-    ("g_value_set_int64",         :GINT64,   Clonglong),
-    ("g_value_set_uint64",        :GUINT64,  Culonglong),
-    ("g_value_set_double",        :GDOUBLE,  Cdouble),
-    ("g_value_set_float",         :GFLOAT,   Cfloat),
-    ("g_value_set_enum",          :GENUM,    Cint),
-    ("g_value_set_flags",         :GFLAGS,   Cint),
-    ("g_value_set_string",        :GSTR,     Cstring),
-    ("vips_value_set_ref_string", :REFSTR,   Cstring))
-
-    @eval set_type(gvalue, ::Val{$gtyp}, value) = ccall(($fun, _LIBNAME), 
-        Cvoid, (Ptr{GValue}, $ctyp), 
-        Ref(gvalue), value)
-
-end
-
-function set_type(gvalue, ::Val{ARRAY_INT}, value)
-    # TODO
-end
-
-function set_type(gvalue, ::Val{ARRAY_DOUBLE}, value)
-    # TODO
-end
-
-function set_type(gvalue, ::Val{ARRAY_IMAGE}, value)
-    # TODO
-end
-
-function set_type(gvalue, ::Val{BLOB}, value)
-    # TODO
-end
-
-function type_fundamental(gtype)
-    ccall((:g_type_fundamental, _LIBNAME), 
-        Clonglong, (Clonglong,), 
-        gtype)
-end
-
 function enum_from_nick(gtype, name)
     ccall((:vips_enum_from_nick, _LIBNAME), 
         Clonglong, (Clonglong, Cstring), 
@@ -175,81 +136,8 @@ function enum_from_nick(gtype, name)
 end
 
 # turn a string into a gtype, ready to be passed into libvips
-function to_enum(gtype, value)
-    if value <: String
-        value = enum_from_nick(gtype, value)
-    end
-
-    value
-end
-
-function set(gvalue, value)
-    gtype = gvalue.gtype
-    fundamental = type_fundamental(gtype)
-
-    if fundamental == GENUM
-        value = to_enum(gtype, value)
-        set_type(gvalue, Val(gtype), value)
-    elseif fundamental == GOBJECT
-        set_type(gvalue, Val(GOBJECT), value.pointer)
-    else
-        set_type(gvalue, Val(gtype), value)
-    end
-
-end
-
-for (fun, gtyp, ctyp) in (
-    ("g_value_get_boolean", :GBOOLEAN, Cint),
-    ("g_value_get_int",     :GINT,     Cint),
-    ("g_value_get_int64",   :GINT64,   Clonglong),
-    ("g_value_get_uint64",  :GUINT64,  Culonglong),
-    ("g_value_get_double",  :GDOUBLE,  Cdouble),
-    ("g_value_get_object",  :GOBJECT,  Ptr{GObject}),
-    ("g_value_get_float",   :GFLOAT,   Cfloat))
-
-    @eval get_type(gvalue, ::Val{$gtyp}) = ccall(($fun, _LIBNAME), 
-        $ctyp, (Ptr{GValue},), 
-        Ref(gvalue))
-end
-
-# string gets needs an extra unsafe_string() on the output to get a julia
-# string back
-for (fun, gtyp) in (
-    ("vips_value_get_ref_string",  :REFSTR),
-    ("g_value_get_string",  :GSTR))
-
-    @eval begin
-        function get_type(gvalue, ::Val{$gtyp}) 
-            str = ccall(($fun, _LIBNAME), 
-                Cstring, (Ptr{GValue},), 
-                Ref(gvalue))
-
-            unsafe_string(str)
-        end
-    end
-end
-
-function get_type(gvalue, ::Val{ARRAY_INT})
-    # TODO
-end
-
-function get_type(gvalue, ::Val{ARRAY_DOUBLE})
-    # TODO
-end
-
-function get_type(gvalue, ::Val{ARRAY_IMAGE})
-    # TODO
-end
-
-function get_type(gvalue, ::Val{BLOB})
-    # TODO
-end
-
-function enum_nick(gtype, value)
-    ccall((:vips_enum_nick, _LIBNAME), 
-        Cstring, (Clonglong, Clonglong), 
-        gtype, value)
-end
+to_enum(gtype, value::AbstractString) = enum_from_nick(gtype, value)
+to_enum(gtype, value) = value 
 
 # turn an enum int back into a string
 function from_enum(gtype, value)
@@ -261,23 +149,138 @@ function from_enum(gtype, value)
     unsafe_string(value)
 end
 
+function enum_nick(gtype, value)
+    ccall((:vips_enum_nick, _LIBNAME), 
+        Cstring, (Clonglong, Clonglong), 
+        gtype, value)
+end
+
+# set_type() uses a fundamental gtype (eg. "enum") and a specific type (eg.
+# "enum BandFormat") to set a gvalue
+for (fun, gtyp, ctyp) in (
+    ("g_value_set_boolean",       :GBOOLEAN, Cint),
+    ("g_value_set_int64",         :GINT64,   Clonglong),
+    ("g_value_set_uint64",        :GUINT64,  Culonglong),
+    ("g_value_set_double",        :GDOUBLE,  Cdouble),
+    ("g_value_set_float",         :GFLOAT,   Cfloat),
+    ("g_value_set_enum",          :GENUM,    Cint),
+    ("g_value_set_flags",         :GFLAGS,   Cint),
+    ("g_value_set_string",        :GSTR,     Cstring),
+    ("g_value_set_object",        :GOBJECT,  Ptr{GObject}),
+    ("vips_value_set_ref_string", :REFSTR,   Cstring))
+
+    @eval set_type(gvalue, ::Any, ::Val{$gtyp}, value) = ccall(($fun, _LIBNAME),
+        Cvoid, (Ptr{GValue}, $ctyp), 
+        Ref(gvalue), value)
+
+end
+
+function set_type(gvalue, ::Any, ::Val{GENUM}, gtype, value)
+    value = to_enum(gtype, value)
+    set_type(gvalue, Any, Val(gtype), value)
+end
+
+function set_type(gvalue, ::Val{GOBJECT}, gtype, value)
+    set_type(gvalue, Any, Val(GOBJECT), value.pointer)
+end
+
+function set_type(gvalue, ::Any, ::Val{ARRAY_INT}, value)
+    # TODO
+end
+
+function set_type(gvalue, ::Any, ::Val{ARRAY_DOUBLE}, value)
+    # TODO
+end
+
+function set_type(gvalue, ::Any, ::Val{ARRAY_IMAGE}, value)
+    # TODO
+end
+
+function set_type(gvalue, ::Any, ::Val{BLOB}, value)
+    # TODO
+end
+
+function type_fundamental(gtype)
+    ccall((:g_type_fundamental, _LIBNAME), 
+        Clonglong, (Clonglong,), 
+        gtype)
+end
+
+function set(gvalue, value)
+    gtype = gvalue.gtype
+    fundamental = type_fundamental(gtype)
+    set_type(gvalue, Val(fundamental), Val(gtype), value)
+end
+
+for (fun, gtyp, ctyp) in (
+    ("g_value_get_boolean", :GBOOLEAN, Cint),
+    ("g_value_get_int",     :GINT,     Cint),
+    ("g_value_get_int64",   :GINT64,   Clonglong),
+    ("g_value_get_uint64",  :GUINT64,  Culonglong),
+    ("g_value_get_float",   :GFLOAT,   Cfloat),
+    ("g_value_get_double",  :GDOUBLE,  Cdouble),
+    ("g_value_get_enum",    :GENUM,    Cint),
+    ("g_value_get_flags",   :GFLAGS,   Cint),
+    ("g_value_get_object",  :GOBJECT,  Ptr{GObject}),
+    ("g_value_get_float",   :GFLOAT,   Cfloat))
+
+    @eval get_type(gvalue, ::Any, ::Val{$gtyp}) = ccall(($fun, _LIBNAME), 
+        $ctyp, (Ptr{GValue},), 
+        Ref(gvalue))
+end
+
+# string gets needs an extra unsafe_string() on the output to get a julia
+# string back
+for (fun, gtyp) in (
+    ("vips_value_get_ref_string",  :REFSTR),
+    ("g_value_get_string",  :GSTR))
+
+    @eval begin
+        function get_type(gvalue, ::Any, ::Val{$gtyp}) 
+            str = ccall(($fun, _LIBNAME), 
+                Cstring, (Ptr{GValue},), 
+                Ref(gvalue))
+
+            unsafe_string(str)
+        end
+    end
+end
+
+function get_type(gvalue, ::Val{GENUM}, gtype)
+    value = get_type(gvalue, Any, Val(GENUM))
+    from_enum(gtype, value)
+end
+
+function get_type(gvalue, ::Val{GFLAGS}, gtype)
+    get_type(gvalue, Any, Val(GFLAGS))
+end
+
+function get_type(gvalue, ::Val{GOBJECT}, ::Val{IMAGE})
+    pointer = get_type(gvalue, Any, Val(GOBJECT))
+    ref(pointer)
+    Image(pointer)
+end
+
+function get_type(gvalue, ::Any, ::Val{ARRAY_INT})
+    # TODO
+end
+
+function get_type(gvalue, ::Any, ::Val{ARRAY_DOUBLE})
+    # TODO
+end
+
+function get_type(gvalue, ::Any, ::Val{ARRAY_IMAGE})
+    # TODO
+end
+
+function get_type(gvalue, ::Any, ::Val{BLOB})
+    # TODO
+end
+
 function get(gvalue)
     gtype = gvalue.gtype
     fundamental = type_fundamental(gtype)
-
-    if fundamental == GENUM
-        value = get_type(gvalue, Val(gtype))
-        from_enum(gtype, value)
-    elseif fundamental == GFLAGS
-        get_type(gvalue, Val(fundamental))
-    elseif gtype == IMAGE
-        # g_value_get_object() will not add a ref
-        pointer = get_type(gvalue, Val(GOBJECT))
-        ref(pointer)
-        Image(pointer)
-    else
-        get_type(gvalue, Val(gtype))
-    end
+    get_type(gvalue, Val(fundamental), Val(gtype))
 end
 
 #=
