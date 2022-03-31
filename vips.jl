@@ -36,8 +36,12 @@ println("libvips version = $(VIPS_VERSION)")
 #
 =#
 
+# ie. this is 32-bits on a 32-bit platform, 64 on a 64-bit one
+const GType = Csize_t
+
 mutable struct GValue
-    gtype::Int64
+    gtype::GType
+
     data1::Int64
     data2::Int64
 
@@ -50,6 +54,19 @@ end
 
 # the base type for glib ... automatic ref and unref
 abstract type GObject end
+
+# the operation type subclasses GObject
+mutable struct Operation 
+    pointer::Ptr{GObject}
+
+    function Operation(pointer::Ptr{GObject})
+        ref(pointer)
+        unref(pointer)
+
+        operation = new(pointer)
+        finalizer(operation -> unref(operation.pointer), operation)
+    end
+end
 
 # the image type subclasses GObject
 mutable struct Image 
@@ -64,22 +81,19 @@ mutable struct Image
     end
 end
 
-#=
-#
-# GObject support
-#
-=#
+mutable struct GParamSpec
+    # opaque pointer used by GObject
+    g_type_instance::Ptr{Cvoid}
 
-function ref(x::Ptr{GObject})
-    ccall((:g_object_ref, _LIBNAME), 
-        Cvoid, (Ptr{GObject},), 
-        x)
-end
+    name::Ptr{Cstring}
+    flags::Cuint
+    value_type::GType
+    owner_type::GType
 
-function unref(x::Ptr{GObject})
-    ccall((:g_object_unref, _LIBNAME), 
-        Cvoid, (Ptr{GObject},), 
-        x)
+    # there are more, but they are private
+
+    # no need for a constructor, we are given pointers to these things by
+    # GObject, we never make or free them ourselves
 end
 
 #=
@@ -90,7 +104,7 @@ end
 
 function gtype(name)
     ccall((:g_type_from_name, _LIBNAME), 
-        Int64, (Cstring,), 
+        GType, (Cstring,), 
         name)
 end
 
@@ -125,7 +139,7 @@ end
 
 function init(gvalue, type)
     ccall((:g_value_init, _LIBNAME), 
-        Cvoid, (Ptr{GValue}, Int64), 
+        Cvoid, (Ptr{GValue}, GType), 
         Ref(gvalue), type)
 end
 
@@ -221,8 +235,7 @@ for (fun, gtyp, ctyp) in (
     ("g_value_get_double",  :GDOUBLE,  Cdouble),
     ("g_value_get_enum",    :GENUM,    Cint),
     ("g_value_get_flags",   :GFLAGS,   Cint),
-    ("g_value_get_object",  :GOBJECT,  Ptr{GObject}),
-    ("g_value_get_float",   :GFLOAT,   Cfloat))
+    ("g_value_get_object",  :GOBJECT,  Ptr{GObject}))
 
     @eval get_type(gvalue, ::Any, ::Val{$gtyp}) = ccall(($fun, _LIBNAME), 
         $ctyp, (Ptr{GValue},), 
@@ -285,12 +298,149 @@ end
 
 #=
 #
+# GObject support
+#
+=#
+
+function ref(pointer::Ptr{GObject})
+    ccall((:g_object_ref, _LIBNAME), 
+        Cvoid, (Ptr{GObject},), 
+        pointer)
+end
+
+function unref(pointer::Ptr{GObject})
+    ccall((:g_object_unref, _LIBNAME), 
+        Cvoid, (Ptr{GObject},), 
+        pointer)
+end
+
+# this is horribly slow, cache this if possible
+function get_pspec(pointer::Ptr{GObject}, name)::Ptr{GParamSpec}
+    pspec::Ptr{GParamSpec}
+    result = ccall((:vips_object_get_argument, _LIBNAME), 
+        Cint, (Ptr{GObject}, Cstring, Ptr{GParamSpec}, Ptr{Cvoid}, Ptr{Cvoid}),
+        pointer, name, Ref(pspec), C_NULL, C_NULL)
+    if result != 0
+        return nothing
+    end
+
+    return pspec
+end
+
+get_pspec(gobject::GObject, name) = get_pspec(gobject.pointer, name)
+
+function get_blurb(pspec)::String
+    ccall((:g_param_spec_get_blurb, _LIBNAME), 
+        Cstring, (Ptr{GParamSpec},),
+        pspec)
+end
+
+function get_typeof(pointer::Ptr{GObject}, name)::GType
+    pspec = get_pspec(pointer, name)
+    if pspec == nothing
+        return 0
+    else
+        return pspec.value_type
+    end
+end
+
+get_typeof(gobject::GObject, name) = get_typeof(gobject.pointer, name)
+
+function get(gobject, name)
+    gtype = get_typeof(gobject, name)
+    if gtype == 0
+        error("Property $name not found")
+    end
+
+    gvalue = GValue()
+    init(gvalue, gtype)
+    ccall((:g_object_get_property, _LIBNAME), 
+        Cvoid, (Ptr{GObject}, Ptr{GValue}), 
+        gobject.pointer, Ref{gvalue})
+
+    get(gvalue)
+end
+
+function set(gobject, name, value)
+    gtype = get_typeof(gobject, name)
+    if gtype == 0
+        error("Property $name not found")
+    end
+
+    gvalue = GValue()
+    init(gvalue, gtype)
+    set(gvalue, value)
+    ccall((:g_object_set_property, _LIBNAME), 
+        Cvoid, (Ptr{GObject}, Cstring, Ptr{GValue}), 
+        gobject.pointer, name, Ref{gvalue})
+end
+
+function set_string(gobject, string_option)
+    ccall((:vips_object_set_from_string, _LIBNAME), 
+        Cvoid, (Ptr{GObject}, Cstring),
+        gobject.pointer, string_options)
+end
+
+function get_description(gobject)
+    ccall((:vips_object_get_description, _LIBNAME), 
+        Cstring, (Ptr{GObject},),
+        gobject.pointer)
+end
+
+#=
+#
+# Operation class
+#
+=#
+
+function Operation(name::String)
+    pointer = ccall((:vips_operation_new, _LIBNAME), 
+        Ptr{GObject}, (Cstring,), 
+        name)
+    if pointer == C_NULL
+        error_exit()
+    end
+    Operation(pointer)
+end
+
+function imageize(match_image, value)
+    # TODO
+    
+    return value
+end
+
+# set a parameter on an operation
+function set(operation, name, flags, match_image, value)
+    if match_image
+        gtype = get_typeof(operation, name)
+
+        if gtype == IMAGE
+            value = imageize(match_image, value)
+        elseif gtype == ARRAY_IMAGE
+            value = [imageize(match_image, x) for x in value]
+        end
+    end
+
+    # MODIFY arguments must be copied first
+    if flags & MODIFY
+        value = (copy_memory ∘ copy)(value)
+    end
+
+    set(operation.pointer, name, value)
+end
+
+# walk an operation, building an introspection object
+function introspect(name)
+end
+
+#=
+#
 # libvips image support
 #
 =#
 
 function new_from_file(filename::String)::Image
-    pointer = ccall((:vips_image_new_from_file, "libvips"), 
+    pointer = ccall((:vips_image_new_from_file, _LIBNAME), 
         Ptr{GObject}, (Cstring, Ptr{Cvoid}), 
         filename, C_NULL)
     if pointer == C_NULL
@@ -300,7 +450,7 @@ function new_from_file(filename::String)::Image
 end
 
 function width(image::Image)::Int32
-    ccall((:vips_image_get_width, "libvips"), 
+    ccall((:vips_image_get_width, _LIBNAME), 
         Int32, (Ptr{GObject},), 
         image.pointer)
 end
