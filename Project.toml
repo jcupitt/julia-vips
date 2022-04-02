@@ -1,0 +1,4 @@
+name = "Vips"
+uuid = "824b0126-667a-41d0-baed-a0fd1ad194eb"
+authors = ["John Cupitt <jcupitt@gmail.com>"]
+version = "0.1.0"
