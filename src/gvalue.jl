@@ -140,7 +140,7 @@ for (fun, gtyp, ctyp) in (
     ("g_value_get_flags",   :GFLAGS,   Cint),
     ("g_value_get_object",  :GOBJECT,  Ptr{GObject}))
 
-    @eval get_type(gvalue, ::Any, ::Val{$gtyp}) = ccall(($fun, _LIBNAME), 
+    @eval get_gtype(gvalue, ::Any, ::Val{$gtyp}) = ccall(($fun, _LIBNAME), 
         $ctyp, (Ptr{GValue},), 
         Ref(gvalue))
 end
@@ -152,7 +152,7 @@ for (fun, gtyp) in (
     ("g_value_get_string",  :GSTR))
 
     @eval begin
-        function get_type(gvalue, ::Any, ::Val{$gtyp}) 
+        function get_gtype(gvalue, ::Any, ::Val{$gtyp}) 
             str = ccall(($fun, _LIBNAME), 
                 Cstring, (Ptr{GValue},), 
                 Ref(gvalue))
@@ -162,40 +162,40 @@ for (fun, gtyp) in (
     end
 end
 
-function get_type(gvalue, ::Val{GENUM}, gtype)
-    value = get_type(gvalue, Any, Val(GENUM))
+function get_gtype(gvalue, ::Val{GENUM}, gtype)
+    value = get_gtype(gvalue, Any, Val(GENUM))
     from_enum(gtype, value)
 end
 
-function get_type(gvalue, ::Val{GFLAGS}, gtype)
-    get_type(gvalue, Any, Val(GFLAGS))
+function get_gtype(gvalue, ::Val{GFLAGS}, gtype)
+    get_gtype(gvalue, Any, Val(GFLAGS))
 end
 
-function get_type(gvalue, ::Val{GOBJECT}, ::Val{IMAGE})
-    pointer = get_type(gvalue, Any, Val(GOBJECT))
+function get_gtype(gvalue, ::Val{GOBJECT}, ::Val{IMAGE})
+    pointer = get_gtype(gvalue, Any, Val(GOBJECT))
     ref(pointer)
     Image(pointer)
 end
 
-function get_type(gvalue, ::Any, ::Val{ARRAY_INT})
+function get_gtype(gvalue, ::Any, ::Val{ARRAY_INT})
     # TODO
 end
 
-function get_type(gvalue, ::Any, ::Val{ARRAY_DOUBLE})
+function get_gtype(gvalue, ::Any, ::Val{ARRAY_DOUBLE})
     # TODO
 end
 
-function get_type(gvalue, ::Any, ::Val{ARRAY_IMAGE})
+function get_gtype(gvalue, ::Any, ::Val{ARRAY_IMAGE})
     # TODO
 end
 
-function get_type(gvalue, ::Any, ::Val{BLOB})
+function get_gtype(gvalue, ::Any, ::Val{BLOB})
     # TODO
 end
 
 function get(gvalue)
     gtype = gvalue.gtype
     fundamental = type_fundamental(gtype)
-    get_type(gvalue, Val(fundamental), Val(gtype))
+    get_gtype(gvalue, Val(fundamental), Val(gtype))
 end
 

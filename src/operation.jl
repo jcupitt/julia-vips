@@ -1,6 +1,6 @@
 #=
 #
-# Operation class
+# Operation object
 #
 =#
 
@@ -23,7 +23,7 @@ end
 # set a parameter on an operation
 function set(operation, name, flags, match_image, value)
     if match_image
-        gtype = get_typeof(operation, name)
+        gtype = get_gtype(operation, name)
 
         if gtype == IMAGE
             value = imageize(match_image, value)
@@ -40,7 +40,9 @@ function set(operation, name, flags, match_image, value)
     set(operation.pointer, name, value)
 end
 
-# walk an operation, building an introspection object
-function introspect(name)
+function get_flags(operation)
+    ccall((:vips_operation_get_flags, _LIBNAME), 
+        Int, (Ptr{GObject},),
+        operation.pointer)
 end
 

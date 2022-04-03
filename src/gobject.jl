@@ -37,7 +37,12 @@ function get_blurb(pspec)::String
         pspec)
 end
 
-function get_typeof(pointer::Ptr{GObject}, name)::GType
+function get_blurb(gobject, name)::String
+    pspec = get_pspec(gobject, name)
+    get_blurb(pspec)
+end
+
+function get_gtype(pointer::Ptr{GObject}, name)::GType
     pspec = get_pspec(pointer, name)
     if pspec == nothing
         return 0
@@ -46,10 +51,10 @@ function get_typeof(pointer::Ptr{GObject}, name)::GType
     end
 end
 
-get_typeof(gobject::GObject, name) = get_typeof(gobject.pointer, name)
+get_gtype(gobject::GObject, name) = get_gtype(gobject.pointer, name)
 
 function get(gobject, name)
-    gtype = get_typeof(gobject, name)
+    gtype = get_gtype(gobject, name)
     if gtype == 0
         error("Property $name not found")
     end
@@ -64,7 +69,7 @@ function get(gobject, name)
 end
 
 function set(gobject, name, value)
-    gtype = get_typeof(gobject, name)
+    gtype = get_gtype(gobject, name)
     if gtype == 0
         error("Property $name not found")
     end

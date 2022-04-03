@@ -64,3 +64,41 @@ mutable struct GParamSpec
     # GObject, we never make or free them ourselves
 end
 
+# values for VipsArgumentFlags
+const REQUIRED = 1
+const CONSTRUCT = 2
+const SET_ONCE = 4
+const SET_ALWAYS = 8
+const INPUT = 16
+const OUTPUT = 32
+const DEPRECATED = 64
+const MODIFY = 128
+
+# everything we discover about an operation argument during introspection
+struct Argument
+    name::String
+    flags::Int
+    gtype::GType
+    blurb::String
+
+end
+
+# for VipsOperationFlags
+const OPERATION_DEPRECATED = 8
+
+# everything we discover about an operation during introspection
+struct Introspection
+    name::String
+    flags::Int
+    description::String
+    arguments::OrderedDict{String, Argument}
+
+    required_input::Vector{String}
+    optional_input::Vector{String}
+    required_output::Vector{String}
+    optional_output::Vector{String}
+
+    doc_optional_input::Vector{String}
+    doc_optional_output::Vector{String}
+
+end

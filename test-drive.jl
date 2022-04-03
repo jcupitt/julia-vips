@@ -5,6 +5,7 @@ import Pkg
 tempdir = mktempdir()
 Pkg.activate(tempdir)
 Pkg.activate(".")
+Pkg.add("OrderedCollections")
 
 # test-drive the vips module
 
