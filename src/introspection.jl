@@ -8,30 +8,33 @@
 _introspection_cache = Dict{String, Introspection}()
 
 # by name, from a cache
-function Introspection(name)
+function Introspection(name::String)
     if !haskey(_introspection_cache, name)
-        _introspection_cache[name] = Introspection(name)
+        operation = Operation(name)
+        _introspection_cache[name] = Introspection(operation, name)
     end
 
     _introspection_cache[name]
 end
 
 # walk an operation, building an Introspection object
-function Introspection(name)
-    operation = Operation(name)
-    description = get_description(operation)
-    flags = get_flags(operation)
+function Introspection(operation, operation_name)
+    operation_description = get_description(operation)
+    operation_flags = get_flags(operation)
 
-    names::Array{Cstring}
-    flags::Array{Cint}
-    n_args::Cint
+    names::Array{Cstring} = []
+    flags::Array{Cint} = []
+    n_args::Cint = 0
 
     result = ccall((:vips_object_get_args, _LIBNAME), 
-        Cint, (Ptr{GObject}, Ptr{Array{Cstring}}, Ptr{Array{Cint}}, Ptr{Cint}),
+        Cint, 
+        (Ptr{GObject}, Ptr{Vector{Cstring}}, Ptr{Vector{Cint}}, Ptr{Cint}),
         get_pointer(operation), Ref(names), Ref(flags), Ref(n_args))
     if result != 0 
         error("unable to get arguments from operation")
     end
+
+    println("n_args = ", n_args)
 
     arguments = OrderedDict{String, Argument}();
     for i in 0:(n_args - 1)
@@ -42,6 +45,7 @@ function Introspection(name)
             gtype = get_gtype(operation, name)
             blurb = get_blurb(operation, name)
             arguments[name] = Argument(name, flags[i], gtype, blurb)
+            println("arg = ", name)
         end
     end
 
@@ -97,7 +101,10 @@ function Introspection(name)
         end
     end
 
-    Introspection(name, flags, description, arguments,
-        required_input, optional_input, required_output, optional_output,
-        doc_optional_input, doc_optional_output)
+    Introspection(operation_name, operation_flags, operation_description, 
+        arguments,
+        required_input, optional_input, 
+        required_output, optional_output,
+        doc_optional_input, 
+        doc_optional_output)
 end

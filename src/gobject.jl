@@ -34,10 +34,12 @@ function get_pspec(gobject, name)
     return pspec
 end
 
-function get_blurb(pspec)::String
-    ccall((:g_param_spec_get_blurb, _LIBNAME), 
+function get_blurb(pspec)
+    str = ccall((:g_param_spec_get_blurb, _LIBNAME), 
         Cstring, (Ptr{GParamSpec},),
         pspec)
+
+    unsafe_string(str)
 end
 
 function get_blurb(gobject, name)

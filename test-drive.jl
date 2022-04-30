@@ -11,6 +11,12 @@ Pkg.add("OrderedCollections")
 
 import Vips
 
+println("Introspection tests:")
+intro = Vips.Introspection("add")
+println("built object ", intro)
+
+println()
+println("Image tests:")
 image = Vips.new_from_file("/home/john/pics/k2.jpg")
 println("built object ", image)
 println("width = ", Vips.width(image))
