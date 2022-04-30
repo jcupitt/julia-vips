@@ -20,32 +20,55 @@ mutable struct GValue
 
 end
 
-# the base type for glib ... automatic ref and unref
+# we have a hierarchy of abstract types, and all functions dispatch on these
+#
+# for each abstract tgype, there's a corresponding concrete type that 
+# implements it
+
 abstract type GObject end
 
-# the operation type subclasses GObject
-mutable struct Operation 
+# represents the glib type VipsObject
+abstract type Object <: GObject end
+
+# represent VipsOperation, VipsImage, VipsSource, VipsTarget
+abstract type Operation <: Object end
+abstract type Image <: Object end
+abstract type Source <: Object end
+abstract type Target <: Object end
+
+mutable struct ConcreteGObject <: GObject
     pointer::Ptr{GObject}
 
-    function Operation(pointer::Ptr{GObject})
-        ref(pointer)
-        unref(pointer)
-
-        operation = new(pointer)
-        finalizer(operation -> unref(operation.pointer), operation)
+    function ConcreteGObject(pointer::Ptr{GObject})
+        gobject = new(pointer)
+        finalizer(gobject -> unref(get_pointer(gobject)), gobject)
     end
 end
 
-# the image type subclasses GObject
-mutable struct Image 
+mutable struct ConcreteObject <: Object
     pointer::Ptr{GObject}
 
-    function Image(pointer::Ptr{GObject})
-        ref(pointer)
-        unref(pointer)
+    function ConcreteObject(pointer::Ptr{GObject})
+        object = new(pointer)
+        finalizer(object -> unref(get_pointer(object)), object)
+    end
+end
 
+mutable struct ConcreteOperation <: Operation
+    pointer::Ptr{GObject}
+
+    function ConcreteOperation(pointer::Ptr{GObject})
+        operation = new(pointer)
+        finalizer(operation -> unref(get_pointer(operation)), operation)
+    end
+end
+
+mutable struct ConcreteImage <: Image
+    pointer::Ptr{GObject}
+
+    function ConcreteImage(pointer::Ptr{GObject})
         image = new(pointer)
-        finalizer(image -> unref(image.pointer), image)
+        finalizer(image -> unref(get_pointer(image)), image)
     end
 end
 

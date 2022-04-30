@@ -8,17 +8,17 @@
 _introspection_cache = Dict{String, Introspection}()
 
 # by name, from a cache
-function Introspection(name::String)::Introspection
+function Introspection(name)
     if !haskey(_introspection_cache, name)
-        operation = Operation(name)
-        _introspection_cache[name] = Introspection(operation)
+        _introspection_cache[name] = Introspection(name)
     end
 
     _introspection_cache[name]
 end
 
 # walk an operation, building an Introspection object
-function Introspection(operation::Operation)::Introspection
+function Introspection(name)
+    operation = Operation(name)
     description = get_description(operation)
     flags = get_flags(operation)
 
@@ -28,7 +28,7 @@ function Introspection(operation::Operation)::Introspection
 
     result = ccall((:vips_object_get_args, _LIBNAME), 
         Cint, (Ptr{GObject}, Ptr{Array{Cstring}}, Ptr{Array{Cint}}, Ptr{Cint}),
-        operation.pointer, Ref(names), Ref(flags), Ref(n_args))
+        get_pointer(operation), Ref(names), Ref(flags), Ref(n_args))
     if result != 0 
         error("unable to get arguments from operation")
     end
@@ -55,7 +55,7 @@ function Introspection(operation::Operation)::Introspection
     doc_optional_input = []
     doc_optional_output = []
 
-    # divide args into categories
+    # sort args into categories
     for argument in arguments
         if argument.flags & INPUT &&
             argument.flags & REQUIRED &&
@@ -80,6 +80,7 @@ function Introspection(operation::Operation)::Introspection
             !(argument.flags & _REQUIRED)
             push!(optional_input, argument.name)
 
+            # doc args omit deprecated
             if !(argument.flags & DEPRECATED)
                 push!(doc_optional_input, argument.name)
             end
@@ -89,6 +90,7 @@ function Introspection(operation::Operation)::Introspection
             !(argument.flags & REQUIRED)
             push!(optional_output, argument.name)
 
+            # doc args omit deprecated
             if !(argument.flags & _DEPRECATED)
                 push!(doc_optional_output, argument.name)
             end

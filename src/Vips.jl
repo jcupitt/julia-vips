@@ -11,6 +11,7 @@ module Vips
     include("types.jl")
     include("gvalue.jl")
     include("gobject.jl")
+    include("object.jl")
     include("image.jl")
     include("introspection.jl")
     include("operation.jl")

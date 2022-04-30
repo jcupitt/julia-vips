@@ -11,7 +11,11 @@ function Operation(name::String)
     if pointer == C_NULL
         error_exit()
     end
-    Operation(pointer)
+    ConcreteOperation(pointer)
+end
+
+function get_pointer(operation::Operation)
+    operation.pointer
 end
 
 function imageize(match_image, value)
@@ -34,15 +38,15 @@ function set(operation, name, flags, match_image, value)
 
     # MODIFY arguments must be copied first
     if flags & MODIFY
-        value = (copy_memory ∘ copy)(value)
+        value = copy_memory(value)
     end
 
-    set(operation.pointer, name, value)
+    set(operation, name, value)
 end
 
 function get_flags(operation)
     ccall((:vips_operation_get_flags, _LIBNAME), 
         Int, (Ptr{GObject},),
-        operation.pointer)
+        get_pointer(operation))
 end
 

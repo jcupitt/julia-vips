@@ -4,6 +4,10 @@
 #
 =#
 
+function get_pointer(gobject::GObject)
+    gobject.pointer
+end
+
 function ref(pointer::Ptr{GObject})
     ccall((:g_object_ref, _LIBNAME), 
         Cvoid, (Ptr{GObject},), 
@@ -17,11 +21,12 @@ function unref(pointer::Ptr{GObject})
 end
 
 # this is horribly slow, cache this if possible
-function get_pspec(pointer::Ptr{GObject}, name)::Ptr{GParamSpec}
+# this will only work on VipsObject, but it's more convenient to define it here
+function get_pspec(gobject, name)
     pspec::Ptr{GParamSpec}
     result = ccall((:vips_object_get_argument, _LIBNAME), 
         Cint, (Ptr{GObject}, Cstring, Ptr{GParamSpec}, Ptr{Cvoid}, Ptr{Cvoid}),
-        pointer, name, Ref(pspec), C_NULL, C_NULL)
+        get_pointer(gobject), name, Ref(pspec), C_NULL, C_NULL)
     if result != 0
         return nothing
     end
@@ -29,29 +34,24 @@ function get_pspec(pointer::Ptr{GObject}, name)::Ptr{GParamSpec}
     return pspec
 end
 
-get_pspec(gobject::GObject, name) = get_pspec(gobject.pointer, name)
-
 function get_blurb(pspec)::String
     ccall((:g_param_spec_get_blurb, _LIBNAME), 
         Cstring, (Ptr{GParamSpec},),
         pspec)
 end
 
-function get_blurb(gobject, name)::String
-    pspec = get_pspec(gobject, name)
-    get_blurb(pspec)
+function get_blurb(gobject, name)
+    get_blurb(get_pspec(gobject, name))
 end
 
-function get_gtype(pointer::Ptr{GObject}, name)::GType
-    pspec = get_pspec(pointer, name)
+function get_gtype(gobject, name)::GType
+    pspec = get_pspec(gobject, name)
     if pspec == nothing
         return 0
     else
         return pspec.value_type
     end
 end
-
-get_gtype(gobject::GObject, name) = get_gtype(gobject.pointer, name)
 
 function get(gobject, name)
     gtype = get_gtype(gobject, name)
@@ -63,7 +63,7 @@ function get(gobject, name)
     init(gvalue, gtype)
     ccall((:g_object_get_property, _LIBNAME), 
         Cvoid, (Ptr{GObject}, Ptr{GValue}), 
-        gobject.pointer, Ref{gvalue})
+        get_pointer(gobject), Ref{gvalue})
 
     get(gvalue)
 end
@@ -79,17 +79,5 @@ function set(gobject, name, value)
     set(gvalue, value)
     ccall((:g_object_set_property, _LIBNAME), 
         Cvoid, (Ptr{GObject}, Cstring, Ptr{GValue}), 
-        gobject.pointer, name, Ref{gvalue})
-end
-
-function set_string(gobject, string_option)
-    ccall((:vips_object_set_from_string, _LIBNAME), 
-        Cvoid, (Ptr{GObject}, Cstring),
-        gobject.pointer, string_options)
-end
-
-function get_description(gobject)
-    ccall((:vips_object_get_description, _LIBNAME), 
-        Cstring, (Ptr{GObject},),
-        gobject.pointer)
+        get_pointer(gobject), name, Ref{gvalue})
 end

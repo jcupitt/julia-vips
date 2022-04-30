@@ -174,7 +174,7 @@ end
 function get_gtype(gvalue, ::Val{GOBJECT}, ::Val{IMAGE})
     pointer = get_gtype(gvalue, Any, Val(GOBJECT))
     ref(pointer)
-    Image(pointer)
+    ConcreteImage(pointer)
 end
 
 function get_gtype(gvalue, ::Any, ::Val{ARRAY_INT})
