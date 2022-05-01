@@ -23,15 +23,42 @@ end
 # this is horribly slow, cache this if possible
 # this will only work on VipsObject, but it's more convenient to define it here
 function get_pspec(gobject, name)
-    pspec::Ptr{GParamSpec}
+    cpspec = Ref{Ptr{GParamSpec}}(C_NULL)
+    cargument_class = Ref{Ptr{Cvoid}}(C_NULL)
+    cargument_instance = Ref{Ptr{Cvoid}}(C_NULL)
+
+    println("get_pspec:")
+    println("before:")
+    println("cpspec[] = ", cpspec[])
+
+    structinfo(T) = [(fieldoffset(T,i), fieldname(T,i), fieldtype(T,i)) for i = 1:fieldcount(T)];
+    println(structinfo(GParamSpec))
+
     result = ccall((:vips_object_get_argument, _LIBNAME), 
-        Cint, (Ptr{GObject}, Cstring, Ptr{GParamSpec}, Ptr{Cvoid}, Ptr{Cvoid}),
-        get_pointer(gobject), name, Ref(pspec), C_NULL, C_NULL)
+        Cint, (Ptr{GObject}, Cstring, 
+               Ref{Ptr{GParamSpec}}, Ref{Ptr{Cvoid}}, Ref{Ptr{Cvoid}}),
+        get_pointer(gobject), name, cpspec, cargument_class, cargument_instance)
     if result != 0
         return nothing
     end
 
-    return pspec
+    println("after:")
+    println("cpspec[] = ", cpspec[])
+
+    println("calling unsafe_wrap:")
+
+    pspec = unsafe_wrap(Vector{GParamSpec}, cpspec[], 1)
+
+    println("after:")
+
+#    str = unsafe_string(pspec[1].name)
+#    println("pspec[1].name = ",  str)
+
+    println("pspec[1].flags = ", pspec[1].flags)
+    println("pspec[1].value_type = ", pspec[1].value_type)
+    println("pspec[1].owner_type = ", pspec[1].owner_type)
+
+    return pspec[1]
 end
 
 function get_blurb(pspec)

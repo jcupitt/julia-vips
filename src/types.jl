@@ -76,7 +76,7 @@ mutable struct GParamSpec
     # opaque pointer used by GObject
     g_type_instance::Ptr{Cvoid}
 
-    name::Ptr{Cstring}
+    name::Cstring
     flags::Cuint
     value_type::GType
     owner_type::GType
